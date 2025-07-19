@@ -34,7 +34,9 @@ void CreateJointGrid( b2WorldId worldId )
 
 	b2Circle circle = { { 0.0f, 0.0f }, 0.4f };
 
-	b2RevoluteJointDef jd = b2DefaultRevoluteJointDef();
+	b2RevoluteJointDef jointDef = b2DefaultRevoluteJointDef();
+	jointDef.base.drawScale = 0.4f;
+	
 	b2BodyDef bodyDef = b2DefaultBodyDef();
 
 	for ( int k = 0; k < N; ++k )
@@ -61,20 +63,20 @@ void CreateJointGrid( b2WorldId worldId )
 
 			if ( i > 0 )
 			{
-				jd.bodyIdA = bodies[index - 1];
-				jd.bodyIdB = body;
-				jd.localAnchorA = ( b2Vec2 ){ 0.0f, -0.5f };
-				jd.localAnchorB = ( b2Vec2 ){ 0.0f, 0.5f };
-				b2CreateRevoluteJoint( worldId, &jd );
+				jointDef.base.bodyIdA = bodies[index - 1];
+				jointDef.base.bodyIdB = body;
+				jointDef.base.localFrameA.p = ( b2Vec2 ){ 0.0f, -0.5f };
+				jointDef.base.localFrameB.p = ( b2Vec2 ){ 0.0f, 0.5f };
+				b2CreateRevoluteJoint( worldId, &jointDef );
 			}
 
 			if ( k > 0 )
 			{
-				jd.bodyIdA = bodies[index - N];
-				jd.bodyIdB = body;
-				jd.localAnchorA = ( b2Vec2 ){ 0.5f, 0.0f };
-				jd.localAnchorB = ( b2Vec2 ){ -0.5f, 0.0f };
-				b2CreateRevoluteJoint( worldId, &jd );
+				jointDef.base.bodyIdA = bodies[index - N];
+				jointDef.base.bodyIdB = body;
+				jointDef.base.localFrameA.p = ( b2Vec2 ){ 0.5f, 0.0f };
+				jointDef.base.localFrameB.p = ( b2Vec2 ){ -0.5f, 0.0f };
+				b2CreateRevoluteJoint( worldId, &jointDef );
 			}
 
 			bodies[index++] = body;
@@ -102,7 +104,7 @@ void CreateLargePyramid( b2WorldId worldId )
 
 	b2BodyDef bodyDef = b2DefaultBodyDef();
 	bodyDef.type = b2_dynamicBody;
-	bodyDef.enableSleep = false;
+	//bodyDef.enableSleep = false;
 
 	b2ShapeDef shapeDef = b2DefaultShapeDef();
 	shapeDef.density = 1.0f;
@@ -379,15 +381,16 @@ void CreateSpinner( b2WorldId worldId )
 
 		b2Polygon box = b2MakeRoundedBox( 0.4f, 20.0f, 0.2f );
 		b2ShapeDef shapeDef = b2DefaultShapeDef();
-		shapeDef.friction = 0.0f;
+		shapeDef.material.friction = 0.0f;
 		b2CreatePolygonShape( spinnerId, &shapeDef, &box );
 
 		float motorSpeed = 5.0f;
-		float maxMotorTorque = 40000.0f;
+		//float maxMotorTorque = 100.0f * 40000.0f;
+		float maxMotorTorque = FLT_MAX;
 		b2RevoluteJointDef jointDef = b2DefaultRevoluteJointDef();
-		jointDef.bodyIdA = groundId;
-		jointDef.bodyIdB = spinnerId;
-		jointDef.localAnchorA = bodyDef.position;
+		jointDef.base.bodyIdA = groundId;
+		jointDef.base.bodyIdB = spinnerId;
+		jointDef.base.localFrameA.p = bodyDef.position;
 		jointDef.enableMotor = true;
 		jointDef.motorSpeed = motorSpeed;
 		jointDef.maxMotorTorque = maxMotorTorque;
@@ -402,13 +405,13 @@ void CreateSpinner( b2WorldId worldId )
 	b2BodyDef bodyDef = b2DefaultBodyDef();
 	bodyDef.type = b2_dynamicBody;
 	b2ShapeDef shapeDef = b2DefaultShapeDef();
-	shapeDef.friction = 0.1f;
-	shapeDef.restitution = 0.1f;
+	shapeDef.material.friction = 0.1f;
+	shapeDef.material.restitution = 0.1f;
 	shapeDef.density = 0.25f;
 
-	int bodyCount = BENCHMARK_DEBUG ? 499 : 3038;
+	int bodyCount = BENCHMARK_DEBUG ? 499 : 2 * 3038;
 
-	float x = -24.0f, y = 2.0f;
+	float x = -23.0f, y = 2.0f;
 	for ( int i = 0; i < bodyCount; ++i )
 	{
 		bodyDef.position = ( b2Vec2 ){ x, y };
@@ -428,12 +431,12 @@ void CreateSpinner( b2WorldId worldId )
 			b2CreatePolygonShape( bodyId, &shapeDef, &square );
 		}
 
-		x += 1.0f;
+		x += 0.5f;
 
-		if ( x > 24.0f )
+		if ( x >= 23.0f )
 		{
-			x = -24.0f;
-			y += 1.0f;
+			x = -23.0f;
+			y += 0.5f;
 		}
 	}
 }
@@ -517,17 +520,16 @@ void CreateTumbler( b2WorldId worldId )
 
 		float motorSpeed = 25.0f;
 
-		b2RevoluteJointDef jd = b2DefaultRevoluteJointDef();
-		jd.bodyIdA = groundId;
-		jd.bodyIdB = bodyId;
-		jd.localAnchorA = ( b2Vec2 ){ 0.0f, 10.0f };
-		jd.localAnchorB = ( b2Vec2 ){ 0.0f, 0.0f };
-		jd.referenceAngle = 0.0f;
-		jd.motorSpeed = ( B2_PI / 180.0f ) * motorSpeed;
-		jd.maxMotorTorque = 1e8f;
-		jd.enableMotor = true;
+		b2RevoluteJointDef jointDef = b2DefaultRevoluteJointDef();
+		jointDef.base.bodyIdA = groundId;
+		jointDef.base.bodyIdB = bodyId;
+		jointDef.base.localFrameA.p = ( b2Vec2 ){ 0.0f, 10.0f };
+		jointDef.base.localFrameB.p = ( b2Vec2 ){ 0.0f, 0.0f };
+		jointDef.motorSpeed = ( B2_PI / 180.0f ) * motorSpeed;
+		jointDef.maxMotorTorque = 1e8f;
+		jointDef.enableMotor = true;
 
-		b2CreateRevoluteJoint( worldId, &jd );
+		b2CreateRevoluteJoint( worldId, &jointDef );
 	}
 
 	int gridCount = BENCHMARK_DEBUG ? 20 : 45;

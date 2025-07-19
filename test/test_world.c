@@ -59,7 +59,7 @@ int HelloWorld( void )
 	shapeDef.density = 1.0f;
 
 	// Override the default friction.
-	shapeDef.friction = 0.3f;
+	shapeDef.material.friction = 0.3f;
 
 	// Add the shape to the body.
 	b2CreatePolygonShape( bodyId, &shapeDef, &dynamicBox );
@@ -252,11 +252,12 @@ static bool CustomFilter( b2ShapeId shapeIdA, b2ShapeId shapeIdB, void* context 
 	return true;
 }
 
-static bool PreSolveStatic( b2ShapeId shapeIdA, b2ShapeId shapeIdB, b2Manifold* manifold, void* context )
+static bool PreSolveStatic( b2ShapeId shapeIdA, b2ShapeId shapeIdB, b2Vec2 point, b2Vec2 normal, void* context )
 {
 	(void)shapeIdA;
 	(void)shapeIdB;
-	(void)manifold;
+	(void)point;
+	(void)normal;
 	ENSURE( context == NULL );
 	return false;
 }
@@ -302,7 +303,6 @@ int TestWorldCoverage( void )
 	b2World_Explode( worldId, &explosionDef );
 
 	b2World_SetContactTuning( worldId, 10.0f, 2.0f, 4.0f );
-	b2World_SetJointTuning( worldId, 10.0f, 2.0f );
 
 	b2World_SetMaximumLinearSpeed( worldId, 10.0f );
 	value = b2World_GetMaximumLinearSpeed( worldId );
@@ -339,6 +339,7 @@ static int TestSensor( void )
 	b2BodyId wallId = b2CreateBody( worldId, &bodyDef );
 	b2Polygon box = b2MakeBox( 0.5f, 10.0f );
 	b2ShapeDef shapeDef = b2DefaultShapeDef();
+	shapeDef.enableSensorEvents = true;
 	b2CreatePolygonShape( wallId, &shapeDef, &box );
 
 	// Bullet fired towards the wall
@@ -351,6 +352,7 @@ static int TestSensor( void )
 	b2BodyId bulletId = b2CreateBody( worldId, &bodyDef );
 	shapeDef = b2DefaultShapeDef();
 	shapeDef.isSensor = true;
+	shapeDef.enableSensorEvents = true;
 	b2Circle circle = { { 0.0f, 0.0f }, 0.1f };
 	b2CreateCircleShape( bulletId, &shapeDef, &circle );
 

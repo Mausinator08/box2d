@@ -8,12 +8,12 @@
 #include "core.h"
 #include "joint.h"
 #include "solver_set.h"
-#include "world.h"
+#include "physics_world.h"
 
 #include <stddef.h>
 
-B2_ARRAY_SOURCE( b2Island, b2Island );
-B2_ARRAY_SOURCE( b2IslandSim, b2IslandSim );
+B2_ARRAY_SOURCE( b2Island, b2Island )
+B2_ARRAY_SOURCE( b2IslandSim, b2IslandSim )
 
 b2Island* b2CreateIsland( b2World* world, int setIndex )
 {
@@ -57,6 +57,11 @@ b2Island* b2CreateIsland( b2World* world, int setIndex )
 
 void b2DestroyIsland( b2World* world, int islandId )
 {
+	if (world->splitIslandId == islandId)
+	{
+		world->splitIslandId = B2_NULL_INDEX;
+	}
+
 	// assume island is empty
 	b2Island* island = b2IslandArray_Get( &world->islands, islandId );
 	b2SolverSet* set = b2SolverSetArray_Get( &world->solverSets, island->setIndex );
@@ -208,6 +213,8 @@ void b2LinkContact( b2World* world, b2Contact* contact )
 	{
 		b2AddContactToIsland( world, islandIdB, contact );
 	}
+
+	// todo why not merge the islands right here?
 }
 
 // This is called when a contact no longer has contact points or when a contact is destroyed.
@@ -376,7 +383,10 @@ void b2LinkJoint( b2World* world, b2Joint* joint, bool mergeIslands )
 
 void b2UnlinkJoint( b2World* world, b2Joint* joint )
 {
-	B2_ASSERT( joint->islandId != B2_NULL_INDEX );
+	if (joint->islandId == B2_NULL_INDEX)
+	{
+		return;
+	}
 
 	// remove from island
 	int islandId = joint->islandId;
@@ -614,7 +624,7 @@ void b2SplitIsland( b2World* world, int baseId )
 	int bodyCount = baseIsland->bodyCount;
 
 	b2Body* bodies = world->bodies.data;
-	b2ArenaAllocator* alloc = &world->stackAllocator;
+	b2ArenaAllocator* alloc = &world->arena;
 
 	// No lock is needed because I ensure the allocator is not used while this task is active.
 	int* stack = b2AllocateArenaItem( alloc, bodyCount * sizeof( int ), "island stack" );
@@ -859,6 +869,11 @@ void b2SplitIslandTask( int startIndex, int endIndex, uint32_t threadIndex, void
 #if B2_VALIDATE
 void b2ValidateIsland( b2World* world, int islandId )
 {
+	if (islandId == B2_NULL_INDEX)
+	{
+		return;
+	}
+	
 	b2Island* island = b2IslandArray_Get( &world->islands, islandId );
 	B2_ASSERT( island->islandId == islandId );
 	B2_ASSERT( island->setIndex != B2_NULL_INDEX );
