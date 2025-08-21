@@ -17,6 +17,20 @@
 
 #include <stdio.h>
 
+// Point-to-point constraint
+// C = pB - pA
+// Cdot = vB - vA
+//      = vB + cross(wB, rB) - vA - cross(wA, rA)
+// J = [-E -skew(rA) E skew(rB) ]
+
+// Identity used:
+// w k % (rx i + ry j) = w * (-ry i + rx j)
+
+// Motor constraint
+// Cdot = wB - wA
+// J = [0 0 -1 0 0 1]
+// K = invIA + invIB
+
 void b2RevoluteJoint_EnableSpring( b2JointId jointId, bool enableSpring )
 {
 	b2JointSim* joint = b2GetJointSimCheckType( jointId, b2_revoluteJoint );
@@ -187,19 +201,6 @@ float b2GetRevoluteJointTorque( b2World* world, b2JointSim* base )
 	return torque;
 }
 
-// Point-to-point constraint
-// C = p2 - p1
-// Cdot = v2 - v1
-//      = v2 + cross(w2, r2) - v1 - cross(w1, r1)
-// J = [-I -r1_skew I r2_skew ]
-// Identity used:
-// w k % (rx i + ry j) = w * (-ry i + rx j)
-
-// Motor constraint
-// Cdot = w2 - w1
-// J = [0 0 -1 0 0 1]
-// K = invI1 + invI2
-
 void b2PrepareRevoluteJoint( b2JointSim* base, b2StepContext* context )
 {
 	B2_ASSERT( base->type == b2_revoluteJoint );
@@ -287,11 +288,17 @@ void b2WarmStartRevoluteJoint( b2JointSim* base, b2StepContext* context )
 
 	float axialImpulse = joint->springImpulse + joint->motorImpulse + joint->lowerImpulse - joint->upperImpulse;
 
-	stateA->linearVelocity = b2MulSub( stateA->linearVelocity, mA, joint->linearImpulse );
-	stateA->angularVelocity -= iA * ( b2Cross( rA, joint->linearImpulse ) + axialImpulse );
+	if ( stateA->flags & b2_dynamicFlag )
+	{
+		stateA->linearVelocity = b2MulSub( stateA->linearVelocity, mA, joint->linearImpulse );
+		stateA->angularVelocity -= iA * ( b2Cross( rA, joint->linearImpulse ) + axialImpulse );
+	}
 
-	stateB->linearVelocity = b2MulAdd( stateB->linearVelocity, mB, joint->linearImpulse );
-	stateB->angularVelocity += iB * ( b2Cross( rB, joint->linearImpulse ) + axialImpulse );
+	if ( stateB->flags & b2_dynamicFlag )
+	{
+		stateB->linearVelocity = b2MulAdd( stateB->linearVelocity, mB, joint->linearImpulse );
+		stateB->angularVelocity += iB * ( b2Cross( rB, joint->linearImpulse ) + axialImpulse );
+	}
 }
 
 void b2SolveRevoluteJoint( b2JointSim* base, b2StepContext* context, bool useBias )
@@ -466,10 +473,17 @@ void b2SolveRevoluteJoint( b2JointSim* base, b2StepContext* context, bool useBia
 		wB += iB * b2Cross( rB, impulse );
 	}
 
-	stateA->linearVelocity = vA;
-	stateA->angularVelocity = wA;
-	stateB->linearVelocity = vB;
-	stateB->angularVelocity = wB;
+	if ( stateA->flags & b2_dynamicFlag )
+	{
+		stateA->linearVelocity = vA;
+		stateA->angularVelocity = wA;
+	}
+
+	if ( stateB->flags & b2_dynamicFlag )
+	{
+		stateB->linearVelocity = vB;
+		stateB->angularVelocity = wB;
+	}
 }
 
 #if 0

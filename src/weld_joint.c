@@ -4,9 +4,9 @@
 #include "body.h"
 #include "core.h"
 #include "joint.h"
+#include "physics_world.h"
 #include "solver.h"
 #include "solver_set.h"
-#include "physics_world.h"
 
 // needed for dll export
 #include "box2d/box2d.h"
@@ -139,20 +139,20 @@ void b2PrepareWeldJoint( b2JointSim* base, b2StepContext* context )
 
 	if ( joint->linearHertz == 0.0f )
 	{
-		joint->linearSoftness = base->constraintSoftness;
+		joint->linearSpring = base->constraintSoftness;
 	}
 	else
 	{
-		joint->linearSoftness = b2MakeSoft( joint->linearHertz, joint->linearDampingRatio, context->h );
+		joint->linearSpring = b2MakeSoft( joint->linearHertz, joint->linearDampingRatio, context->h );
 	}
 
 	if ( joint->angularHertz == 0.0f )
 	{
-		joint->angularSoftness = base->constraintSoftness;
+		joint->angularSpring = base->constraintSoftness;
 	}
 	else
 	{
-		joint->angularSoftness = b2MakeSoft( joint->angularHertz, joint->angularDampingRatio, context->h );
+		joint->angularSpring = b2MakeSoft( joint->angularHertz, joint->angularDampingRatio, context->h );
 	}
 
 	if ( context->enableWarmStarting == false )
@@ -180,11 +180,17 @@ void b2WarmStartWeldJoint( b2JointSim* base, b2StepContext* context )
 	b2Vec2 rA = b2RotateVector( stateA->deltaRotation, joint->frameA.p );
 	b2Vec2 rB = b2RotateVector( stateB->deltaRotation, joint->frameB.p );
 
-	stateA->linearVelocity = b2MulSub( stateA->linearVelocity, mA, joint->linearImpulse );
-	stateA->angularVelocity -= iA * ( b2Cross( rA, joint->linearImpulse ) + joint->angularImpulse );
+	if ( stateA->flags & b2_dynamicFlag )
+	{
+		stateA->linearVelocity = b2MulSub( stateA->linearVelocity, mA, joint->linearImpulse );
+		stateA->angularVelocity -= iA * ( b2Cross( rA, joint->linearImpulse ) + joint->angularImpulse );
+	}
 
-	stateB->linearVelocity = b2MulAdd( stateB->linearVelocity, mB, joint->linearImpulse );
-	stateB->angularVelocity += iB * ( b2Cross( rB, joint->linearImpulse ) + joint->angularImpulse );
+	if ( stateB->flags & b2_dynamicFlag )
+	{
+		stateB->linearVelocity = b2MulAdd( stateB->linearVelocity, mB, joint->linearImpulse );
+		stateB->angularVelocity += iB * ( b2Cross( rB, joint->linearImpulse ) + joint->angularImpulse );
+	}
 }
 
 void b2SolveWeldJoint( b2JointSim* base, b2StepContext* context, bool useBias )
@@ -222,9 +228,9 @@ void b2SolveWeldJoint( b2JointSim* base, b2StepContext* context, bool useBias )
 		if ( useBias || joint->angularHertz > 0.0f )
 		{
 			float C = jointAngle;
-			bias = joint->angularSoftness.biasRate * C;
-			massScale = joint->angularSoftness.massScale;
-			impulseScale = joint->angularSoftness.impulseScale;
+			bias = joint->angularSpring.biasRate * C;
+			massScale = joint->angularSpring.massScale;
+			impulseScale = joint->angularSpring.impulseScale;
 		}
 
 		float Cdot = wB - wA;
@@ -249,9 +255,9 @@ void b2SolveWeldJoint( b2JointSim* base, b2StepContext* context, bool useBias )
 			b2Vec2 dcB = stateB->deltaPosition;
 			b2Vec2 C = b2Add( b2Add( b2Sub( dcB, dcA ), b2Sub( rB, rA ) ), joint->deltaCenter );
 
-			bias = b2MulSV( joint->linearSoftness.biasRate, C );
-			massScale = joint->linearSoftness.massScale;
-			impulseScale = joint->linearSoftness.impulseScale;
+			bias = b2MulSV( joint->linearSpring.biasRate, C );
+			massScale = joint->linearSpring.massScale;
+			impulseScale = joint->linearSpring.impulseScale;
 		}
 
 		b2Vec2 Cdot = b2Sub( b2Add( vB, b2CrossSV( wB, rB ) ), b2Add( vA, b2CrossSV( wA, rA ) ) );
@@ -276,10 +282,17 @@ void b2SolveWeldJoint( b2JointSim* base, b2StepContext* context, bool useBias )
 		wB += iB * b2Cross( rB, impulse );
 	}
 
-	stateA->linearVelocity = vA;
-	stateA->angularVelocity = wA;
-	stateB->linearVelocity = vB;
-	stateB->angularVelocity = wB;
+	if ( stateA->flags & b2_dynamicFlag )
+	{
+		stateA->linearVelocity = vA;
+		stateA->angularVelocity = wA;
+	}
+
+	if ( stateB->flags & b2_dynamicFlag )
+	{
+		stateB->linearVelocity = vB;
+		stateB->angularVelocity = wB;
+	}
 }
 
 #if 0
@@ -312,15 +325,15 @@ void b2DrawWeldJoint( b2DebugDraw* draw, b2JointSim* base, b2Transform transform
 
 	b2Vec2 points[4];
 
-	for (int i = 0; i < 4; ++i)
+	for ( int i = 0; i < 4; ++i )
 	{
-		points[i] = b2TransformPoint(frameA, box.vertices[i]);
+		points[i] = b2TransformPoint( frameA, box.vertices[i] );
 	}
 	draw->DrawPolygonFcn( points, 4, b2_colorDarkOrange, draw->context );
 
-	for (int i = 0; i < 4; ++i)
+	for ( int i = 0; i < 4; ++i )
 	{
-		points[i] = b2TransformPoint(frameB, box.vertices[i]);
+		points[i] = b2TransformPoint( frameB, box.vertices[i] );
 	}
 
 	draw->DrawPolygonFcn( points, 4, b2_colorDarkCyan, draw->context );

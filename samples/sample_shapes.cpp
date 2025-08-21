@@ -10,6 +10,7 @@
 
 #include <GLFW/glfw3.h>
 #include <imgui.h>
+#include <stdio.h>
 #include <vector>
 
 // extern "C" int b2_toiCalls;
@@ -39,8 +40,11 @@ public:
 		m_chainId = b2_nullChainId;
 		m_shapeId = b2_nullShapeId;
 		m_shapeType = e_circleShape;
-		m_restitution = 0.0f;
-		m_friction = 0.2f;
+
+		m_material = b2DefaultSurfaceMaterial();
+		m_material.friction = 0.2f;
+		m_material.customColor = b2_colorSteelBlue;
+		m_material.userMaterialId = 42;
 
 		CreateScene();
 		Launch();
@@ -109,15 +113,10 @@ public:
 		// }
 		// printf("};\n");
 
-		b2SurfaceMaterial material = {};
-		material.friction = 0.2f;
-		material.customColor = b2_colorSteelBlue;
-		material.userMaterialId = 42;
-
 		b2ChainDef chainDef = b2DefaultChainDef();
 		chainDef.points = points;
 		chainDef.count = count;
-		chainDef.materials = &material;
+		chainDef.materials = &m_material;
 		chainDef.materialCount = 1;
 		chainDef.isLoop = true;
 
@@ -140,9 +139,7 @@ public:
 		m_bodyId = b2CreateBody( m_worldId, &bodyDef );
 
 		b2ShapeDef shapeDef = b2DefaultShapeDef();
-		shapeDef.density = 1.0f;
-		shapeDef.material.friction = m_friction;
-		shapeDef.material.restitution = m_restitution;
+		shapeDef.material = m_material;
 
 		if ( m_shapeType == e_circleShape )
 		{
@@ -151,7 +148,7 @@ public:
 		}
 		else if ( m_shapeType == e_capsuleShape )
 		{
-			b2Capsule capsule = { { -0.5f, 0.0f }, { 0.5f, 0.0 }, 0.25f };
+			b2Capsule capsule = { { -0.5f, 0.0f }, { 0.5f, 0.0f }, 0.25f };
 			m_shapeId = b2CreateCapsuleShape( m_bodyId, &shapeDef, &capsule );
 		}
 		else
@@ -184,15 +181,15 @@ public:
 			Launch();
 		}
 
-		if ( ImGui::SliderFloat( "Friction", &m_friction, 0.0f, 1.0f, "%.2f" ) )
+		if ( ImGui::SliderFloat( "Friction", &m_material.friction, 0.0f, 1.0f, "%.2f" ) )
 		{
-			b2Shape_SetFriction( m_shapeId, m_friction );
-			b2Chain_SetFriction( m_chainId, m_friction );
+			b2Shape_SetSurfaceMaterial( m_shapeId, &m_material );
+			b2Chain_SetSurfaceMaterial( m_chainId, &m_material, 1 );
 		}
 
-		if ( ImGui::SliderFloat( "Restitution", &m_restitution, 0.0f, 2.0f, "%.1f" ) )
+		if ( ImGui::SliderFloat( "Restitution", &m_material.restitution, 0.0f, 2.0f, "%.1f" ) )
 		{
-			b2Shape_SetRestitution( m_shapeId, m_restitution );
+			b2Shape_SetSurfaceMaterial( m_shapeId, &m_material );
 		}
 
 		if ( ImGui::Button( "Launch" ) )
@@ -223,8 +220,7 @@ public:
 	b2ChainId m_chainId;
 	ShapeType m_shapeType;
 	b2ShapeId m_shapeId;
-	float m_restitution;
-	float m_friction;
+	b2SurfaceMaterial m_material;
 };
 
 static int sampleChainShape = RegisterSample( "Shapes", "Chain Shape", ChainShape::Create );
@@ -698,6 +694,7 @@ public:
 		b2BodyDef bodyDef = b2DefaultBodyDef();
 		bodyDef.type = b2_dynamicBody;
 		b2ShapeDef shapeDef = b2DefaultShapeDef();
+		shapeDef.enableCustomFiltering = true;
 		b2Polygon box = b2MakeSquare( 1.0f );
 		float x = -e_count;
 
@@ -1450,7 +1447,7 @@ public:
 		{
 			bodyDef.position = { 0.0f, 2.0f };
 			b2BodyId bodyId = b2CreateBody( m_worldId, &bodyDef );
-			b2Capsule capsule = { { -0.5f, 0.0f }, { 0.5f, 0.0 }, 0.25f };
+			b2Capsule capsule = { { -0.5f, 0.0f }, { 0.5f, 0.0f }, 0.25f };
 			b2CreateCapsuleShape( bodyId, &shapeDef, &capsule );
 		}
 
@@ -1695,7 +1692,7 @@ public:
 
 		b2WeldJointDef weldDef = b2DefaultWeldJointDef();
 		weldDef.base.bodyIdA = groundId;
-		weldDef.base.localFrameA.q = b2MakeRot(m_referenceAngle);
+		weldDef.base.localFrameA.q = b2MakeRot( m_referenceAngle );
 		weldDef.base.localFrameB.p = b2Vec2_zero;
 		weldDef.angularHertz = 0.5f;
 		weldDef.angularDampingRatio = 0.7f;
@@ -1845,3 +1842,69 @@ public:
 };
 
 static int sampleSingleBox = RegisterSample( "Shapes", "Recreate Static", RecreateStatic::Create );
+
+class BoxRestitution : public Sample
+{
+public:
+	explicit BoxRestitution( SampleContext* context )
+		: Sample( context )
+	{
+		if ( m_context->restart == false )
+		{
+			m_context->camera.m_center = { 0.0f, 5.0f };
+			m_context->camera.m_zoom = 10.0f;
+		}
+
+		{
+			b2BodyDef bodyDef = b2DefaultBodyDef();
+			b2BodyId groundId = b2CreateBody( m_worldId, &bodyDef );
+
+			float h = 2.0f * m_count;
+			b2Segment segment = { { -h, 0.0f }, { h, 0.0f } };
+			b2ShapeDef shapeDef = b2DefaultShapeDef();
+			b2CreateSegmentShape( groundId, &shapeDef, &segment );
+		}
+
+		b2Polygon box = b2MakeBox( 0.5f, 0.5f );
+
+		b2ShapeDef shapeDef = b2DefaultShapeDef();
+		shapeDef.density = 1.0f;
+		shapeDef.material.restitution = 0.0f;
+
+		b2BodyDef bodyDef = b2DefaultBodyDef();
+		bodyDef.type = b2_dynamicBody;
+
+		float dr = 1.0f / ( m_count > 1 ? m_count - 1 : 1 );
+		float x = -1.0f * ( m_count - 1 );
+		float dx = 2.0f;
+
+		for ( int i = 0; i < m_count; ++i )
+		{
+			char buffer[32];
+			snprintf( buffer, 32, "%.2f", shapeDef.material.restitution );
+
+			bodyDef.position = { x, 1.0f };
+			bodyDef.name = buffer;
+			b2BodyId bodyId = b2CreateBody( m_worldId, &bodyDef );
+
+			b2CreatePolygonShape( bodyId, &shapeDef, &box );
+
+			bodyDef.position = { x, 4.0f };
+			bodyDef.name = buffer;
+			bodyId = b2CreateBody( m_worldId, &bodyDef );
+
+			b2CreatePolygonShape( bodyId, &shapeDef, &box );
+
+			shapeDef.material.restitution += dr;
+			x += dx;
+		}
+	}
+	static Sample* Create( SampleContext* context )
+	{
+		return new BoxRestitution( context );
+	}
+
+	static constexpr int m_count = 10;
+};
+
+static int sampleBoxRestitution = RegisterSample( "Shapes", "Box Restitution", BoxRestitution::Create );
